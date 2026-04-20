@@ -29,14 +29,12 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.annotation.Resource;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>
@@ -82,6 +80,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     public void shutdown() {
         running = false;
         SECKILL_ORDER_EXECUTOR.shutdownNow();
+        try {
+            if (!SECKILL_ORDER_EXECUTOR.awaitTermination(3, TimeUnit.SECONDS)) {
+                log.warn("秒杀订单处理线程池未在预期时间内关闭");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private class VoucherOrderHandler implements Runnable {
@@ -111,6 +116,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                     //5.ACK确认 SACK stream.orders g1 id
                     stringRedisTemplate.opsForStream().acknowledge(queueName,"g1",record.getId());
                 }catch (Exception e){
+                    if (shouldExitOnShutdown(e)) {
+                        break;
+                    }
                     log.error("处理订单异常",e);
                     handlePendingList();
                 }
@@ -118,7 +126,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
 
         private void handlePendingList() {
-            while (true) {
+            while (running) {
                 try{
                     //1.获取pending-list中的订单信息 XREADGOURP GROUP g1 c1 COUNT 1 STREAMS stream.orders 0
                     List<MapRecord<String, Object, Object>> list = stringRedisTemplate.opsForStream().read(
@@ -141,10 +149,30 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
                     //5.ACK确认 SACK stream.orders g1 id
                     stringRedisTemplate.opsForStream().acknowledge(queueName,"g1",record.getId());
                 }catch (Exception e){
+                    if (shouldExitOnShutdown(e)) {
+                        break;
+                    }
                     log.error("处理订单异常",e);
                 }
             }
         }
+    }
+
+    private boolean shouldExitOnShutdown(Exception e) {
+        if (!running || Thread.currentThread().isInterrupted()) {
+            return true;
+        }
+        Throwable cause = e;
+        while (cause != null) {
+            String message = cause.getMessage();
+            if (message != null && (message.contains("Connection is closed")
+                    || message.contains("LettuceConnectionFactory was destroyed"))) {
+                log.debug("秒杀订单处理线程检测到 Redis 连接关闭，准备退出");
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 
     /*
@@ -200,9 +228,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     public void createVoucherOrder(VoucherOrder voucherOrder) {
         //5.一人一单
         Long userId = voucherOrder.getUserId();
+        Long voucherId = voucherOrder.getVoucherId();
 
         //5.1查询订单
-        Long count = query().eq("user_id", userId).eq("voucher_id", voucherOrder).count();
+        Long count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
         //5.2判断是否存在
         if(count > 0L){
             //用户已经购买过了
@@ -213,7 +242,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         //6.扣减库存
         boolean success = seckillVoucherService.update()
                 .setSql("stock = stock - 1")
-                .eq("voucher_id", voucherOrder).gt("stock",0).update();
+                .eq("voucher_id", voucherId).gt("stock",0).update();
         if(!success){
             //扣减失败
             log.error("不允许重复下单");

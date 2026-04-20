@@ -1,11 +1,16 @@
 package com.hmdp;
 
 import com.hmdp.entity.Shop;
+import com.hmdp.entity.SeckillVoucher;
+import com.hmdp.entity.VoucherOrder;
+import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.impl.ShopServiceImpl;
+import com.hmdp.service.impl.VoucherOrderServiceImpl;
 import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.RedisIdWorker;
 import io.lettuce.core.api.sync.RedisAclCommands;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,8 +18,10 @@ import org.springframework.data.geo.Point;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +42,10 @@ public class HmdpApplicationTest {
     private RedisIdWorker redisIdWorker;
     @Resource
     private RedisTemplate redisTemplate;
+    @Resource
+    private VoucherOrderServiceImpl voucherOrderService;
+    @Resource
+    private ISeckillVoucherService seckillVoucherService;
 
     // 创建一个固定大小的线程池，线程池中最多同时存在 500 个工作线程
     private final ExecutorService executorService = Executors.newFixedThreadPool(500);
@@ -125,5 +136,43 @@ public class HmdpApplicationTest {
         //统计数量
         Long count = stringRedisTemplate.opsForHyperLogLog().size("hl2");
         System.out.println("count = " + count);
+    }
+
+    @Test
+    @Transactional
+    void testCreateVoucherOrderShouldCreateOnlyOneOrderAndDeductStockOnce() {
+        long voucherId = 99991L;
+        long userId = 88881L;
+
+        SeckillVoucher seckillVoucher = new SeckillVoucher();
+        seckillVoucher.setVoucherId(voucherId);
+        seckillVoucher.setStock(1);
+        seckillVoucher.setBeginTime(LocalDateTime.now().minusHours(1));
+        seckillVoucher.setEndTime(LocalDateTime.now().plusHours(1));
+        seckillVoucherService.save(seckillVoucher);
+
+        VoucherOrder firstOrder = new VoucherOrder();
+        firstOrder.setId(1L);
+        firstOrder.setUserId(userId);
+        firstOrder.setVoucherId(voucherId);
+
+        voucherOrderService.createVoucherOrder(firstOrder);
+
+        VoucherOrder secondOrder = new VoucherOrder();
+        secondOrder.setId(2L);
+        secondOrder.setUserId(userId);
+        secondOrder.setVoucherId(voucherId);
+
+        voucherOrderService.createVoucherOrder(secondOrder);
+
+        long orderCount = voucherOrderService.query()
+                .eq("user_id", userId)
+                .eq("voucher_id", voucherId)
+                .count();
+        SeckillVoucher savedVoucher = seckillVoucherService.getById(voucherId);
+
+        Assertions.assertEquals(1L, orderCount);
+        Assertions.assertNotNull(savedVoucher);
+        Assertions.assertEquals(0, savedVoucher.getStock());
     }
 }

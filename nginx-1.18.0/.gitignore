@@ -1,0 +1,3 @@
+../.idea
+nginx-1.18.0/logs/*.log
+nginx-1.18.0/logs/*.pid
