@@ -3,6 +3,7 @@ package com.hmdp.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.conditions.query.QueryChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -179,6 +180,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             num >>>=1;
         }
         return Result.ok(count);
+    }
+
+    @Override
+    public Result logout(String token) {
+        if (StrUtil.isBlank(token)) {
+            return Result.ok();
+        }
+        stringRedisTemplate.delete(LOGIN_USER_KEY + token);
+        return Result.ok();
     }
 
     private User createUserWithPhone(String phone){
