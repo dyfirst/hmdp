@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project version="4">
-  <component name="DataSourcePerFileMappings">
-    <file url="file://$APPLICATION_CONFIG_DIR$/consoles/db/f16428e9-9686-4445-beb7-80be26b48196/console.sql" value="f16428e9-9686-4445-beb7-80be26b48196" />
-    <file url="file://$PROJECT_DIR$/hmdp.sql" value="f16428e9-9686-4445-beb7-80be26b48196" />
-  </component>
-</project>
