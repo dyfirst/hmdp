@@ -1,4 +1,6 @@
 .idea/
 nginx-1.18.0/logs/
+nginx-1.18.0/temp/*
+!nginx-1.18.0/temp/.gitkeep
 hm-dianping/target/
 out/
