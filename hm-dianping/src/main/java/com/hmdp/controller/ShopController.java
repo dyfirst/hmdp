@@ -6,7 +6,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.SystemConstants;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RedissonClient;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -25,6 +28,9 @@ public class ShopController {
 
     @Resource
     public IShopService shopService;
+
+    @Resource
+    private RedissonClient redissonClient;
 
     /**
      * 根据id查询商铺信息
@@ -45,6 +51,9 @@ public class ShopController {
     public Result saveShop(@RequestBody Shop shop) {
         // 写入数据库
         shopService.save(shop);
+        // 新增店铺同步到布隆过滤器
+        RBloomFilter<Long> bloomFilter = redissonClient.getBloomFilter(RedisConstants.BLOOM_SHOP_KEY);
+        bloomFilter.add(shop.getId());
         // 返回店铺id
         return Result.ok(shop.getId());
     }

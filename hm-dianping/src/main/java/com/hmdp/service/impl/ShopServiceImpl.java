@@ -19,6 +19,8 @@ import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.GeoResults;
 import org.springframework.data.redis.connection.RedisGeoCommands;
+import org.redisson.api.RBloomFilter;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.domain.geo.GeoReference;
 import org.springframework.stereotype.Service;
@@ -48,9 +50,17 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     @Resource
     private CacheClient cacheClient;
 
+    @Resource
+    private RedissonClient redissonClient;
+
 
     @Override
     public Result queryById(Long id) {
+        // 布隆过滤器拦截不存在的 ID
+        RBloomFilter<Long> bloomFilter = redissonClient.getBloomFilter(RedisConstants.BLOOM_SHOP_KEY);
+        if (!bloomFilter.contains(id)) {
+            return Result.fail("店铺不存在");
+        }
         //缓存穿透
         //Shop shop = cacheClient.
         //queryWithPassThrough(RedisConstants.CACHE_SHOP_KEY,id,Shop.class,this::getById, RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
