@@ -7,6 +7,8 @@ public class RedisConstants {
     public static final Long LOGIN_CODE_TTL = 2L;
     public static final String LOGIN_USER_KEY = "login:token:";
     public static final Long LOGIN_USER_TTL = 36000L;
+    // 惰性续期阈值：剩余TTL小于7天(10080分钟)才刷新
+    public static final Long LOGIN_TOKEN_REFRESH_THRESHOLD = 10080L;
 
     public static final Long CACHE_NULL_TTL = 2L;
 
