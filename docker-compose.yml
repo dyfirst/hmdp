@@ -3,10 +3,21 @@ services:
     image: redis:latest
     container_name: hmdp-redis
     ports:
-      - "63791:6379"
+      - "6380:6379"
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hmdp-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: hmdp
+      RABBITMQ_DEFAULT_PASS: hmdp123
+      RABBITMQ_DEFAULT_VHOST: hmdp
 
 volumes:
   redis-data:
