@@ -2,6 +2,7 @@ package com.hmdp.config;
 
 import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
+import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.RedisConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBloomFilter;
@@ -13,7 +14,7 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -25,6 +26,9 @@ public class BloomFilterConfig implements CommandLineRunner {
 
     @Resource
     private ShopMapper shopMapper;
+
+    @Resource
+    private CacheClient cacheClient;
 
     @Override
     public void run(String... args) {
@@ -47,12 +51,18 @@ public class BloomFilterConfig implements CommandLineRunner {
         // 重新初始化：预估 100 万个元素，误判率 3%
         bloomFilter.tryInit(1000000L, 0.03);
 
-        // 从数据库加载所有店铺 ID
-        List<Long> shopIds = shopMapper.selectList(null)
-                .stream().map(Shop::getId).collect(Collectors.toList());
-        for (Long shopId : shopIds) {
-            bloomFilter.add(shopId);
+        // 从数据库加载所有店铺
+        List<Shop> shops = shopMapper.selectList(null);
+        for (Shop shop : shops) {
+            bloomFilter.add(shop.getId());
         }
-        log.info("布隆过滤器重建完成，加载店铺数量：{}", shopIds.size());
+        log.info("布隆过滤器重建完成，加载店铺数量：{}", shops.size());
+
+        // 预热热点商铺缓存（逻辑过期格式）
+        for (Shop shop : shops) {
+            String key = RedisConstants.CACHE_SHOP_KEY + shop.getId();
+            cacheClient.setWithLogicalExpire(key, shop, RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        }
+        log.info("商铺缓存预热完成，数量：{}", shops.size());
     }
 }
